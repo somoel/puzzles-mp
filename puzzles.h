@@ -342,6 +342,7 @@ char *midend_get_random_seed(midend *me);
 bool midend_can_format_as_text_now(midend *me);
 char *midend_text_format(midend *me);
 const char *midend_solve(midend *me);
+const char *const *midend_get_movelog(midend *me, int *n);
 int midend_status(midend *me);
 bool midend_can_undo(midend *me);
 bool midend_can_redo(midend *me);

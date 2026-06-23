@@ -2052,6 +2052,55 @@ char *midend_text_format(midend *me)
 	return NULL;
 }
 
+/*
+ * Return the player's move log for the current game: an array of
+ * pointers to the move strings that, replayed in order through
+ * interpret_move/execute_move, would reconstruct the current state
+ * from the initial state at the last midend_new_game() (or
+ * midend_restart_game()) call.
+ *
+ * Only ordinary player moves (movetype == MOVE) are included. SOLVE
+ * entries (produced by midend_solve) and RESTART entries (produced
+ * by midend_restart_game) are skipped, so the log contains only
+ * direct user input. After a restart, only the moves made since
+ * that restart are returned; the SOLVE step itself is a separate
+ * no-op marker in the undo chain, not a user move.
+ *
+ * The returned array is owned by the midend and remains valid until
+ * the next call to midend_new_game(), midend_restart_game(),
+ * midend_serialise(), midend_deserialise(), or midend_free().
+ * On entry *n is set to the number of moves returned. If there is
+ * no current game the function returns NULL and sets *n to 0.
+ */
+const char *const *midend_get_movelog(midend *me, int *n)
+{
+    int i, j, k;
+    const char **out;
+
+    if (n) *n = 0;
+    if (me->statepos <= 0)
+	return NULL;
+
+    k = 0;
+    for (i = 1; i < me->statepos; i++) {
+	if (me->states[i].movetype == MOVE && me->states[i].movestr)
+	    k++;
+    }
+    if (k == 0)
+	return NULL;
+
+    out = snewn(k, const char *);
+    j = 0;
+    for (i = 1; i < me->statepos; i++) {
+	if (me->states[i].movetype == MOVE && me->states[i].movestr)
+	    out[j++] = me->states[i].movestr;
+    }
+    assert(j == k);
+
+    if (n) *n = k;
+    return out;
+}
+
 const char *midend_solve(midend *me)
 {
     game_state *s;
