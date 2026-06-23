@@ -6,6 +6,10 @@ Makefile*
 .ninja_deps
 .ninja_log
 build.ninja
+# Out-of-source build directories
+/test-*/
+/build-*/
+/InstallationLog.txt
 *.vcxproj
 *.vcxproj.filters
 *.dir/
