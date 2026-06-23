@@ -2,16 +2,17 @@
  * wasmlogic_main.c: entry point for the headless logic-only WASM
  * build of a single puzzle.
  *
- * Compiled together with <puzzle>.c and nullfe.c (plus core). Only
- * the four logic_* entry points listed below are exported; the rest
- * of the back-end is internal to the module.
+ * Compiled together with <puzzle>.c, nullfe.c and core. Only the
+ * small set of logic_* entry points listed below are exported; the
+ * rest of the back-end is internal to the module.
  *
  * Build with -DSTANDALONE_WASM_LOGIC -DPUZZLE_NAME=<name>.
  *
- * Memory model: this module is a small library; the caller owns the
- * host process / WebAssembly instance and decides when to discard
- * it. Strings returned to the caller (logic_new_desc) are heap
- * allocations that the caller releases via logic_free_string.
+ * Memory model: this module is a small library; the caller owns
+ * the host process / WebAssembly instance and decides when to
+ * discard it. Strings returned to the caller (logic_new_desc) are
+ * heap allocations that the caller releases via
+ * logic_free_string.
  */
 
 #include <stdio.h>
@@ -35,143 +36,18 @@
 
 extern const game thegame;
 
-static midend *logic_midend_new(void)
+/* Make a game_params from a string, with the puzzle's default
+ * params as the base. */
+static game_params *params_from_string(const char *params)
 {
-    /* The midend treats the frontend as an opaque pointer: it
-     * stores it, hands it to callbacks, but never dereferences it
-     * itself, and midend_free does not free it. We pass a
-     * small sentinel solely so each midend owns a distinct
-     * identity; nothing reads it. */
-    static int sentinel;
-    return midend_new((frontend *)&sentinel, &thegame, NULL);
-}
-
-static void logic_midend_free(midend *me)
-{
-    if (!me) return;
-    midend_free(me);
+    game_params *p = thegame.default_params();
+    if (params && *params) {
+        thegame.decode_params(p, params);
+    }
+    return p;
 }
 
 /* ---- Public exports --------------------------------------------- */
-
-EMSCRIPTEN_KEEPALIVE
-const char *logic_new_desc(const char *params, const char *seed)
-{
-    midend *me = logic_midend_new();
-    game_params *p = NULL;
-    char *ret = NULL;
-    const char *err;
-
-    if (params && *params) {
-        p = me->ourgame->default_params();
-        me->ourgame->decode_params(p, params);
-        err = me->ourgame->validate_params(p, true);
-        if (err) {
-            me->ourgame->free_params(p);
-            midend_free(me);
-            sfree(me->frontend);
-            return NULL;
-        }
-        midend_set_params(me, p);
-    }
-
-    /* Midend_new_game expects a 15-digit seed, but we'll just pass
-     * what we were given; if the caller supplies a usable seed,
-     * the game is generated from it. */
-    {
-        char *prev_seed = me->seedstr;
-        me->seedstr = seed ? dupstr(seed) : NULL;
-        if (!me->seedstr) {
-            /* fall back to a stable 15-digit string so callers can
-             * still get something out of new_desc() with no seed */
-            me->seedstr = dupstr("100000000000000");
-        }
-        midend_new_game(me);
-        if (me->desc) {
-            ret = dupstr(me->desc);
-        }
-        sfree(me->seedstr);
-        me->seedstr = prev_seed;
-    }
-
-    logic_midend_free(me);
-    return ret;
-}
-
-EMSCRIPTEN_KEEPALIVE
-int logic_validate(const char *params, const char *desc)
-{
-    midend *me = logic_midend_new();
-    char id[1024];
-    const char *err;
-
-    if (!desc) {
-        logic_midend_free(me);
-        return 0;
-    }
-
-    if (params && *params) {
-        snprintf(id, sizeof(id), "%s:%s", params, desc);
-    } else {
-        snprintf(id, sizeof(id), ":%s", desc);
-    }
-
-    err = midend_game_id(me, id);
-    logic_midend_free(me);
-    return err == NULL;
-}
-
-EMSCRIPTEN_KEEPALIVE
-int logic_replay(const char *params, const char *desc,
-                 const char *const *moves, int nmoves)
-{
-    midend *me = logic_midend_new();
-    char id[1024];
-    const char *err;
-    const game *g;
-    game_state *state;
-    int i, won;
-
-    if (!desc) {
-        logic_midend_free(me);
-        return -1;
-    }
-
-    if (params && *params) {
-        snprintf(id, sizeof(id), "%s:%s", params, desc);
-    } else {
-        snprintf(id, sizeof(id), ":%s", desc);
-    }
-
-    err = midend_game_id(me, id);
-    if (err || me->statepos < 1) {
-        logic_midend_free(me);
-        return -1;
-    }
-
-    g = me->ourgame;
-    state = g->dup_game(me->states[me->statepos - 1].state);
-
-    for (i = 0; i < nmoves; i++) {
-        game_state *next;
-        if (!moves[i]) break;
-        next = g->execute_move(state, moves[i]);
-        if (!next) {
-            g->free_game(state);
-            logic_midend_free(me);
-            return 0;
-        }
-        if (next != state) {
-            g->free_game(state);
-            state = next;
-        }
-    }
-
-    won = (g->status(state) == 0);
-    g->free_game(state);
-    logic_midend_free(me);
-    return won ? 1 : 0;
-}
 
 EMSCRIPTEN_KEEPALIVE
 void logic_free_string(const char *s)
@@ -179,18 +55,106 @@ void logic_free_string(const char *s)
     sfree((void *)s);
 }
 
-/* Return the encoded-params string for the puzzle's default
- * parameters. Used by the host UI to send a sensible params
- * without enumerating presets in the browser. */
 EMSCRIPTEN_KEEPALIVE
 const char *logic_default_params(void)
 {
     game_params *p = thegame.default_params();
     char *encoded = thegame.encode_params(p, false);
     thegame.free_params(p);
-    /* encode_params returns a heap buffer; transfer ownership to
-     * the caller. */
     return encoded;
+}
+
+EMSCRIPTEN_KEEPALIVE
+const char *logic_new_desc(const char *params, const char *seed)
+{
+    game_params *p;
+    char *ret = NULL;
+    char *aux = NULL;
+    random_state *rs;
+    char default_seed[16];
+
+    if (!seed || !*seed) {
+        memcpy(default_seed, "100000000000000", 15);
+        default_seed[15] = '\0';
+        seed = default_seed;
+    }
+
+    p = params_from_string(params);
+    rs = random_new(seed, strlen(seed));
+    ret = thegame.new_desc(p, rs, &aux, false);
+    random_free(rs);
+    sfree(aux);
+    thegame.free_params(p);
+    return ret;
+}
+
+EMSCRIPTEN_KEEPALIVE
+const char *logic_get_game_id_error(const char *params, const char *desc)
+{
+    game_params *p = params_from_string(params);
+    const char *err;
+    char *ret;
+
+    if (!desc) {
+        thegame.free_params(p);
+        return NULL;
+    }
+    err = thegame.validate_desc(p, desc);
+    if (!err) {
+        thegame.free_params(p);
+        return NULL;
+    }
+    ret = dupstr(err);
+    thegame.free_params(p);
+    return ret;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int logic_validate(const char *params, const char *desc)
+{
+    const char *err = logic_get_game_id_error(params, desc);
+    if (err) {
+        logic_free_string(err);
+        return 0;
+    }
+    return 1;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int logic_replay(const char *params, const char *desc,
+                 const char *const *moves, int nmoves)
+{
+    game_params *p = params_from_string(params);
+    game_state *state;
+    int i, won;
+
+    if (!desc) {
+        thegame.free_params(p);
+        return -1;
+    }
+    state = thegame.new_game(NULL, p, desc);
+    thegame.free_params(p);
+    if (!state) {
+        return -1;
+    }
+
+    for (i = 0; i < nmoves; i++) {
+        game_state *next;
+        if (!moves[i]) break;
+        next = thegame.execute_move(state, moves[i]);
+        if (!next) {
+            thegame.free_game(state);
+            return 0;
+        }
+        if (next != state) {
+            thegame.free_game(state);
+            state = next;
+        }
+    }
+
+    won = (thegame.status(state) > 0);
+    thegame.free_game(state);
+    return won ? 1 : 0;
 }
 
 /* Tiny main so emcc has an entry point. It is not normally

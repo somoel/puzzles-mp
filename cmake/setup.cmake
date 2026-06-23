@@ -230,7 +230,7 @@ function(logicprogram NAME)
     ${PUZZLES_ROOT_DIR}/${NAME}.c
     ${PUZZLES_ROOT_DIR}/nullfe.c
     ${PUZZLES_ROOT_DIR}/wasmlogic_main.c)
-  target_link_libraries(${NAME}-logic core ${platform_libs})
+  target_link_libraries(${NAME}-logic common ${platform_libs})
   target_include_directories(${NAME}-logic PRIVATE ${PUZZLES_ROOT_DIR})
   target_compile_definitions(${NAME}-logic PRIVATE
     STANDALONE_WASM_LOGIC

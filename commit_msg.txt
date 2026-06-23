@@ -1,0 +1,18 @@
+WASM headless: fix struct opaque access, status convention, glue exports.
+
+- midend.c: add midend_initial_state, midend_state_free, midend_get_desc
+  so the WASM glue can drive the back-end without accessing the
+  opaque struct midend.
+- puzzles.h: prototypes for the three new accessors.
+- wasmlogic_main.c: rewrite to use only public midend APIs, plus
+  call thegame.new_desc / thegame.validate_desc / thegame.new_game
+  / thegame.execute_move directly. Fix the won-detection: status
+  returns +1 for solved, not 0, so won = status > 0.
+- cmake/platforms/wasmlogic.cmake: hardcode the export-list JSON
+  with a foreach loop (the previous list(TRANSFORM ... PREPEND ")
+  trick produced malformed strings on Windows). Trim exports to
+  the small surface we actually use.
+- cmake/setup.cmake: link logicprogram targets against common, not
+  core, so hat.c and spectre.c symbols (used by grid.c) are resolved.
+
+These together fix the build-wasm-logic CI job.

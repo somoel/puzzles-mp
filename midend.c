@@ -2101,6 +2101,45 @@ const char *const *midend_get_movelog(midend *me, int *n)
     return out;
 }
 
+/*
+ * Return a freshly-allocated copy of the puzzle's initial state
+ * (i.e. the state at the last midend_new_game() or
+ * midend_restart_game() call), or NULL if there is no current game.
+ *
+ * The returned state is owned by the caller; free it with
+ * midend_state_free(). Used by server-side replay code that needs
+ * to apply moves through execute_move() without exposing the
+ * midend's internal state array.
+ */
+game_state *midend_initial_state(const midend *me)
+{
+    if (!me || me->statepos < 1) return NULL;
+    return me->ourgame->dup_game(me->states[0].state);
+}
+
+/*
+ * Free a game_state obtained from midend_initial_state() (or any
+ * game_state produced by the back-end's dup_game / execute_move).
+ */
+void midend_state_free(const midend *me, game_state *state)
+{
+    if (!me || !state) return;
+    me->ourgame->free_game(state);
+}
+
+/*
+ * Return a freshly-allocated copy of the current game description
+ * (i.e. the desc that was used to construct the current state),
+ * or NULL if there is no current game. The caller frees the
+ * returned string via sfree (or logic_free_string in the WASM
+ * build).
+ */
+char *midend_get_desc(const midend *me)
+{
+    if (!me || !me->desc) return NULL;
+    return dupstr(me->desc);
+}
+
 const char *midend_solve(midend *me)
 {
     game_state *s;

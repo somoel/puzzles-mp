@@ -29,22 +29,23 @@ set(WASM_HEADLESS_KEEP_FUNCS
   _logic_replay
   _logic_free_string
   _logic_default_params
-  _midend_get_movelog
-  _midend_which_game
-  _midend_new
-  _midend_free
-  _midend_set_params
-  _midend_new_game
-  _midend_game_id
-  _midend_solve
-  _midend_status
-  _midend_process_key
-  _midend_text_format
-  _midend_can_format_as_text_now)
+  _logic_get_game_id_error
+  _midend_get_movelog)
 
-list(TRANSFORM WASM_HEADLESS_KEEP_FUNCS PREPEND \")
-list(TRANSFORM WASM_HEADLESS_KEEP_FUNCS APPEND \")
-string(JOIN "," WASM_HEADLESS_KEEP_STRING ${WASM_HEADLESS_KEEP_FUNCS})
+# Build the JSON array of exported function names. Emscripten
+# EXPORTED_FUNCTIONS expects: ["name1","name2",...]. The CMake
+# `list(TRANSFORM ... PREPEND \")` trick works when the list is
+# later joined with comma; the `\"` gets interpreted as a
+# literal double-quote by the list-to-string machinery.
+set(_quoted_names "")
+foreach(_fn ${WASM_HEADLESS_KEEP_FUNCS})
+  if(_quoted_names STREQUAL "")
+    set(_quoted_names "\"${_fn}\"")
+  else()
+    set(_quoted_names "${_quoted_names},\"${_fn}\"")
+  endif()
+endforeach()
+set(WASM_HEADLESS_KEEP_STRING "[${_quoted_names}]")
 
 # Standalone-WASM build: no front-end, only a tiny export surface.
 set(CMAKE_EXECUTABLE_SUFFIX ".js")
@@ -53,11 +54,10 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang" AND CMAKE_C_COMPILER MATCHES "emcc")
   set(CMAKE_C_LINK_FLAGS "\
 -s ALLOW_MEMORY_GROWTH=1 \
 -s ENVIRONMENT=node,web \
--s EXPORTED_FUNCTIONS='[${WASM_HEADLESS_KEEP_STRING}]' \
--s EXPORTED_RUNTIME_METHODS='[cwrap,UTF8ToString,stringToUTF8,lengthBytesUTF8]' \
+-s EXPORTED_FUNCTIONS=${WASM_HEADLESS_KEEP_STRING} \
+-s EXPORTED_RUNTIME_METHODS=[\\\"cwrap\\\",\\\"UTF8ToString\\\",\\\"stringToUTF8\\\",\\\"lengthBytesUTF8\\\"] \
 -s MODULARIZE=1 \
 -s EXPORT_NAME=Module \
--s STRICT_JS=1 \
 -s STANDALONE_WASM=0 \
 -s WASM=1")
 else()
