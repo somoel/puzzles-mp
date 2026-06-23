@@ -15,7 +15,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            gcc clang cmake make ca-certificates
+            gcc clang cmake make ca-certificates \
+            libgtk-3-dev pkg-config
 
       - name: Configure (gcc, STRICT=ON)
         run: cmake -B test-gcc -DSTRICT=ON .
