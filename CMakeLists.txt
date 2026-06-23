@@ -119,6 +119,12 @@ puzzle(map
 same colour.")
 solver(map)
 
+# Headless logic-only WASM modules for online-puzzles server-side
+# replay/validation. Only built when -DWASM_HEADLESS=ON.
+logicprogram(bridges)
+logicprogram(loopy)
+logicprogram(map)
+
 puzzle(mines
   DISPLAYNAME "Mines"
   DESCRIPTION "Mine-finding puzzle"

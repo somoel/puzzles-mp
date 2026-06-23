@@ -14,6 +14,15 @@ if(USE_DRAW_POLYGON_FALLBACK)
   add_compile_definitions(USE_DRAW_POLYGON_FALLBACK)
 endif()
 
+# When WASM_HEADLESS is on, the build emits only the
+# logic-only WASM modules (no GUI puzzles, no CLI helpers, no icons).
+# Used by online-puzzles for server-side replay/validation.
+option(WASM_HEADLESS "Build only headless logic WASM modules" OFF)
+set(build_logic_programs FALSE)
+if(WASM_HEADLESS)
+  set(build_logic_programs TRUE)
+endif()
+
 # Don't disable assertions, even in release mode.  Our assertions
 # generally aren't expensive and protect against more annoying crashes
 # and memory corruption.
@@ -30,7 +39,9 @@ string(REPLACE "-DNDEBUG" "" CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWI
 #  - define set_platform_puzzle_target_properties(), used below
 #  - define build_platform_extras(), called from the top-level CMakeLists.txt
 #  - override the above build_* settings, if necessary
-if(CMAKE_SYSTEM_NAME MATCHES "Windows")
+if(WASM_HEADLESS)
+  include(cmake/platforms/wasmlogic.cmake)
+elseif(CMAKE_SYSTEM_NAME MATCHES "Windows")
   include(cmake/platforms/windows.cmake)
 elseif(CMAKE_SYSTEM_NAME MATCHES "Darwin")
   include(cmake/platforms/osx.cmake)
@@ -200,6 +211,30 @@ endfunction()
 function(solver NAME)
   cliprogram(${NAME}solver ${puzzle_src_prefix}${NAME}.c ${ARGN}
     COMPILE_DEFINITIONS STANDALONE_SOLVER)
+endfunction()
+
+# Build a headless logic-only WASM module for a puzzle.
+#
+# Active only when build_logic_programs is TRUE (WASM_HEADLESS=ON).
+# Produces <NAME>-logic.{js,wasm} linking against core, with the
+# small set of logic_* entry points exported (see wasmlogic.cmake).
+function(logicprogram NAME)
+  if(NOT build_logic_programs)
+    return()
+  endif()
+  if(NOT EXISTS ${PUZZLES_ROOT_DIR}/${NAME}.c)
+    message(FATAL_ERROR
+      "logicprogram(${NAME}) requires ${PUZZLES_ROOT_DIR}/${NAME}.c")
+  endif()
+  add_executable(${NAME}-logic
+    ${PUZZLES_ROOT_DIR}/${NAME}.c
+    ${PUZZLES_ROOT_DIR}/nullfe.c
+    ${PUZZLES_ROOT_DIR}/wasmlogic_main.c)
+  target_link_libraries(${NAME}-logic core ${platform_libs})
+  target_include_directories(${NAME}-logic PRIVATE ${PUZZLES_ROOT_DIR})
+  target_compile_definitions(${NAME}-logic PRIVATE
+    STANDALONE_WASM_LOGIC
+    PUZZLE_NAME=${NAME})
 endfunction()
 
 function(write_generated_games_header)
