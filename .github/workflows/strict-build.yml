@@ -1,0 +1,34 @@
+name: strict-build
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  strict-gcc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc clang cmake make ca-certificates
+
+      - name: Configure (gcc, STRICT=ON)
+        run: cmake -B test-gcc -DSTRICT=ON .
+
+      - name: Build (gcc)
+        run: cmake --build test-gcc -j$(nproc)
+
+      - name: Configure (clang, STRICT=ON)
+        run: cmake -B test-clang -DSTRICT=ON -DCMAKE_C_COMPILER=clang .
+
+      - name: Build (clang)
+        run: cmake --build test-clang -j$(nproc)
+
+      - name: Benchmark (bridges, loopy, map)
+        working-directory: test-gcc
+        run: ./benchmark.sh bridges loopy map

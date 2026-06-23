@@ -1,0 +1,45 @@
+name: build-wasm-logic
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'wasm-v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      EMSDK_VERSION: '3.1.64'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ env.EMSDK_VERSION }}
+
+      - name: Configure (WASM_HEADLESS)
+        run: |
+          emcmake cmake -B build-wasm -DWASM_HEADLESS=ON -DCMAKE_BUILD_TYPE=Release .
+
+      - name: Build logic modules
+        run: cmake --build build-wasm --target bridges-logic loopy-logic map-logic -j
+
+      - name: List artifacts
+        run: ls -la build-wasm/bridges-logic.* build-wasm/loopy-logic.* build-wasm/map-logic.* || true
+
+      - name: Upload to release (tag pushes only)
+        if: startsWith(github.ref, 'refs/tags/wasm-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            build-wasm/bridges-logic.wasm
+            build-wasm/bridges-logic.js
+            build-wasm/loopy-logic.wasm
+            build-wasm/loopy-logic.js
+            build-wasm/map-logic.wasm
+            build-wasm/map-logic.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
